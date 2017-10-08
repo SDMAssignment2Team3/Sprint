@@ -1,138 +1,178 @@
-var express = require('express');
-var app = express();
-var userSchema = require('./user');
-var bodyParser = require('body-parser')
+var express = require('express'); 
+var app = express(); 
+
 var mongoose = require('mongoose');
-//加密模块
-var crypto = require("crypto");
+require('./connect.js');
+require('./model.js');
+var User = mongoose.model('u2');  //User为model name
+mongoose.Promise = global.Promise;  //
+//Email setting
 
-//链接本地数据库
-var DB_URL = 'mongodb://localhost:27017/mongoose'
-mongoose.connect(DB_URL);
-
-app.use(express.static('public'));
-//解析表单数据
-app.use(bodyParser.urlencoded({extended:true}))
-//显示静态页面
-app.get('/',function(req,res){
-    res.render('index',__dirname+"public/index.html")
-})
-
-
-/*插入数据库函数*/
-function insert(name,psw,nick){
-      //数据格式
-    var user =  new userSchema({
-                username : name,
-                userpsw : psw,
-                nickname : nick,
-                logindate : new Date()
-            });
-    user.save(function(err,res){
-        if(err){
-            console.log(err);
-        }
-        else{
-            console.log(res);
-        }
-    })
-}
-
-/*注册页面数据接收*/
-app.post('/register', function (req, res) {
-  //处理跨域的问题
-  res.setHeader('Content-type','application/json;charset=utf-8')
-  res.header("Access-Control-Allow-Origin", "*");
-  res.header("Access-Control-Allow-Headers", "Content-Type,Content-Length, Authorization, Accept,X-Requested-With");
-  res.header("Access-Control-Allow-Methods","PUT,POST,GET,DELETE,OPTIONS");
-  res.header("X-Powered-By",' 3.2.1')
-   //先查询有没有这个user
-  var UserName = req.body.username;
-  var UserPsw = req.body.password;
-  var Nickname = req.body.nickname;
-  //密码加密
-  var md5 = crypto.createHash("md5");
-  var newPas = md5.update(UserPsw).digest("hex");
-  //通过账号验证
-  var updatestr = {username: UserName};
-    if(UserName == ''){
-       res.send({status:'success',message:false}) ;
-    }
-    res.setHeader('Content-type','application/json;charset=utf-8')
-    userSchema.find(updatestr, function(err, obj){
-        if (err) {
-            console.log("Error:" + err);
-        }
-        else {
-            if(obj.length == 0){
-                //如果查出无数据,就将账户密码插入数据库
-                insert(UserName,newPas,Nickname); 
-                //返回数据到前端
-                res.send({status:'success',message:true}) 
-            }else if(obj.length !=0){
-                res.send({status:'success',message:false}) 
-            }else{
-                res.send({status:'success',message:false}) 
-            }
-        }
-    })  
-});
-
-/*登录处理*/
-app.post('/login', function (req, res, next) {
-  //先查询有没有这个user
-  console.log("req.body"+req.body);
-  var UserName = req.body.username;
-  var UserPsw = req.body.password;
-  //密码加密  
-  var md5 = crypto.createHash("md5");
-  var newPas = md5.update(UserPsw).digest("hex");
-  //通过账号密码搜索验证
-  var updatestr = {username: UserName,userpsw:newPas};
-  //处理跨域的问题
-    res.setHeader('Content-type','application/json;charset=utf-8')
-    res.header("Access-Control-Allow-Origin", "*");
-    res.header("Access-Control-Allow-Headers", "Content-Type,Content-Length, Authorization, Accept,X-Requested-With");
-    res.header("Access-Control-Allow-Methods","PUT,POST,GET,DELETE,OPTIONS");
-    res.header("X-Powered-By",' 3.2.1')
+//Email//test=====================================================
+var nodemailer = require('nodemailer');
+var transporter = nodemailer.createTransport({
     
-    userSchema.find(updatestr, function(err, obj){
-        if (err) {
-            console.log("Error:" + err);
-        }
-        else {
-            if(obj.length == 1){
-                console.log('登录成功');
-                res.send({status:'success',message:true,data:obj}); 
-            }else{
-                console.log('请注册账号'); 
-                res.send({status:'success',message:false}); 
-            }
-        }
-    })
+    service: '163',
+    auth: {
+        user: 'serlerteam3@163.com',
+
+        pass: 'team03'
+    }
 });
+//get login page
+app.get('/',function (req,res) {
+    res.sendfile(__dirname + "/" + "Login.html" );
+})
 
-//处理昵称和头像的上传
-app.post('/uploadImg',function(req,res,next){
-    res.setHeader('Content-type','application/json;charset=utf-8')
-    res.header("Access-Control-Allow-Origin", "*");
-    res.header("Access-Control-Allow-Headers", "Content-Type,Content-Length, Authorization, Accept,X-Requested-With");
-    res.header("Access-Control-Allow-Methods","PUT,POST,GET,DELETE,OPTIONS");
-    res.header("X-Powered-By",' 3.2.1')
-    //id
-    var getName = req.body.sendName;
-    //昵称
-    var myName = req.body.myName;
-
-    var checkName = {username: getName};
-    //修改默认的昵称
-    userSchema.update(checkName,{nickname:myName},function(err, nick){
-        console.log('我是昵称'+nick);
-        res.send({status:'success',message:true,data:nick}); 
+//login logic
+app.get('/Login',function (req,res) {
+    var name=req.query.name;
+    var pwd=req.query.pwd;
+    User.findOne({name:name,pwd:pwd},function (error,result) {
+        if (result==null)
+        {
+            res.sendfile(__dirname + "/" + "no.html" );
+        }else
+        {
+            res.sendfile(__dirname + "/" + "Moderator.html" );
+        }
     })
 })
 
-
-var server = app.listen(1993,function(){
-    console.log('server connect');
+//Get register page
+app.get('/Register.html',function (req,res) {
+    res.sendfile(__dirname+"/"+"Register.html");
 })
+
+
+//Register page logic
+app.get('/Register',function (req,res) {   
+    var email = req.query.email;
+
+ //email
+
+    var mailOptions = {
+        from: 'serlerteam3@163.com', 
+        to: email,
+        subject: 'Hello sir', 
+        text: 'Click to finish register: http://127.0.0.1:3000/Emailcheck.html', 
+        html: '<b>' + 'Click to finish register: http://127.0.0.1:3000/Emailcheck.html' + '</b>'
+    };
+    transporter.sendMail(mailOptions, function(error, info){
+        if(error){
+            return console.log(error);
+        }
+        console.log('Message sent: ' + info.response);
+
+    });
+    //email finish*/
+    res.send("Please check your email!");
+})
+
+//email cleck page
+app.get('/Emailcheck.html',function (req,res) {
+    res.sendfile(__dirname+"/"+"Emailcheck.html");
+})
+
+//email check logic
+app.get('/Emailcheck',function (req,res) {
+    var name=req.query.name;
+    var pwd=req.query.pwd;   
+    var user=new User(
+        {name:name,
+            pwd:pwd
+        }
+    )
+    user.save(function (err,result) {
+        if (result==null) {
+            res.sendfile(__dirname + "/" + "no.html" );
+        } else {
+            res.sendfile(__dirname + "/" + "Moderator.html" );
+        }
+    });
+
+})
+
+
+//read forgetpassword
+app.get('/forgetpassword.html',function (req,res) {
+    res.sendfile(__dirname+"/"+"forgetpassword.html");
+})
+//forgetpassword logic
+
+app.get('/forgetpassword',function (req,res) {
+    var name=req.query.name;
+    User.findOne({name:name},function (error,result) {
+        if (result==null)
+        {
+            res.sendfile(__dirname + "/" + "no.html" );
+        }else
+        {
+            var res = JSON.stringify(result);
+            var resultarr = res.split(',');
+            var pwdjson = resultarr[2];
+            var pwdarr = pwdjson.split(':');
+            var pwd = pwdarr[1];
+            //email
+            var mailOptions = {
+                from: 'serlerteam3@163.com', 
+                to: '544971045@qq.com', 
+                subject: 'Hello sir', 
+                text: 'Your password'+pwd, 
+                html: '<b>Your password'+ pwd +'</b>'
+            };
+            transporter.sendMail(mailOptions, function(error, info){
+                if(error){
+                    return console.log(error);
+                }
+                console.log('Message sent: ' + info.response);
+
+            });
+            //email finish*/
+        }
+    })
+})
+//load moderstor
+app.get('/Moderstor.html',function (req,res) {
+    res.sendfile(__dirname+"/"+"Moderstor.html");
+})
+
+//moderstor logic
+app.get('/Moderstor',function(req,res){
+
+	var a = req.query.a;
+    var res = JSON.stringify(a);
+    var s = 'Sorry, your article is rejected, reason: ';
+
+    if(res == undefined)
+    {
+        s = 'Congratulations, your article is accepted!';
+    }
+    else
+    {
+        s = s+res;
+    }
+
+    //email
+    var mailOptions = {
+                from: 'serlerteam3@163.com', 
+                to: '544971045@qq.com',//'544971045@qq.com', 
+                subject: 'Hello sir', 
+                text: 'Hi sir, '+s, 
+                html: '<b>Hi sir, '+ s +'</b>'
+            };
+            transporter.sendMail(mailOptions, function(error, info){
+                if(error){
+                    return console.log(error);
+                }
+                console.log('Message sent: ' + info.response);
+
+            });
+
+    //email finish
+})
+
+
+var server = app.listen(3000,function(){ 
+console.log('server connect'); 
+}) 
